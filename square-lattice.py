@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 a = 1 # a is the lattice parameter
 t = 1 # t is the hopping parameter
 
-lat = kwant.lattice.square(a)
+lat = kwant.lattice.square(a, norbs=1) # to decomment if problem
 
 def make_lead_x(W):
     syst = kwant.Builder(kwant.TranslationalSymmetry([-1, 0]))
@@ -74,30 +74,76 @@ def make_QPC_lin(square, W, L, r, q, QPC_pot, iterations, t): # Linear decrease
         next_x1, next_x2, next_y1, next_y2 = make_QPC2(square, W, L, x1, x2, y1, y2, QPC_pot+m*i)
         x1, x2, y1, y2 = next_x1, next_x2, next_y1, next_y2
 
+# The 'iterations' parameter defines the length between the source at QPC_pot and the channel.
+# QPC_pot is the highest value of on-site (the one on the gates)
 def make_QPC_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadratic decrease
     x1, x2, y1, y2 = make_QPC1(square, W, L, r, q, QPC_pot)
     n = iterations-1
     b = (4*n*t + 2*n*t*(QPC_pot/t)**0.5)/(QPC_pot - 4*t)
     a = b**2*QPC_pot
     x = np.arange(0, iterations, 1)
-    quad_dec = a/(x+b)**2
+    quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
     for i in range(1, iterations):
         next_x1, next_x2, next_y1, next_y2 = make_QPC2(square, W, L, x1, x2, y1, y2, quad_dec[i])
         x1, x2, y1, y2 = next_x1, next_x2, next_y1, next_y2
 
-W = 20
-L = 50
+##### Modelisation of the SPM tip #####
+
+# The 3 functions below work according to the same structure as the ones for the gates (make_QPC_x).
+
+# The 'onsite' parameter is equivalent to 'QPC_pot' and 'pot', they all represent the same thing.
+def make_circle1(square, x0, y0, R, onsite):
+    xm = int(np.floor(x0-R))
+    xM = int(np.ceil(x0+R))
+    ym = int(np.floor(y0-R))
+    yM = int(np.ceil(y0+R))
+    for i in range(xm, xM+1): # i is the line index
+        for j in range(ym, yM+1): # j is the column index
+            if ((i-x0)**2 + (j-y0)**2) <= R**2:
+                square[lat(j, i)] = onsite
+
+def make_circle2(square, x0, y0, R, onsite):
+    xm = int(np.floor(x0-(R+1)))
+    xM = int(np.ceil(x0+(R+1)))
+    ym = int(np.floor(y0-(R+1)))
+    yM = int(np.ceil(y0+(R+1)))
+    for i in range(xm, xM+1): # i is the line index
+        for j in range(ym, yM+1): # j is the column index
+            if R**2 < ((i-x0)**2 + (j-y0)**2) <= (R+1)**2:
+                square[lat(j, i)] = onsite
+
+def make_circle_quad(square, x0, y0, R, onsite, iterations, t):
+    make_circle1(square, x0, y0, R, onsite)
+    n = iterations-1
+    b = (4*n*t + 2*n*t*(onsite/t)**0.5)/(onsite - 4*t)
+    a = b**2*onsite
+    x = np.arange(0, iterations, 1)
+    quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
+    for i in range(1, iterations):
+        make_circle2(square, x0, y0, R+i-1, quad_dec[i])
+
+W = 100
+L = 200
 square = scattering(W,L)
 square2 = scattering(W,L)
-# x1, x2, y1, y2 = make_QPC1(square2, W, L, 6, 4, 10)
-# next_x1, next_x2, next_y1, next_y2 = make_QPC2(square2, W, L, x1, x2, y1, y2, 8)
-# make_QPC2(square2, W, L, next_x1, next_x2, next_y1, next_y2, 6)
-make_QPC_quad(square2, W, L, 25, 6, 25, 8, 1)
+square3 = scattering(W,L)
+make_QPC_quad(square3, W, L, 25, 2.3, 25, 8, 1)
+make_circle_quad(square3, x0=W//2, y0=L//3, R=1.5, onsite=25, iterations=5, t=1)
+sys = square3.finalized()
 mat = np.zeros((W,L))
 for i in range(L):
     for j in range(W):
         # print("i,j = {},{}".format(i,j))
-        mat[j][i] = square2[lat(i,j)]
+        mat[j][i] = square3[lat(i,j)]
+
+##### Current density #####
+
+wfs = kwant.wave_function(sys, energy=0.8)
+wf_left = wfs(0)
+J0 = kwant.operator.Current(sys)
+current = sum(J0(p) for p in wf_left)
+kwant.plotter.current(sys, current, cmap='viridis')
+
 
 ##### Plot of the on-site parameter in the lattice #####
 
@@ -157,11 +203,6 @@ m=3
 #     make_parabola(x0+m-i, i, i+1, W)
 
 # kwant.plot(square2)
-sys = square2.finalized()
-E = 0.8
-smatrix = kwant.smatrix(sys, energy = E)
-T = smatrix.transmission(1, 0)
-# print('T = '+str(T))
 
 # The function T_of_E is quite heavy and takes some time to execute so I should be careful when 
 # calling it with large inputs
@@ -180,7 +221,7 @@ def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
     plt.ylabel("Conductance [e²/h]")
     plt.title(title)
 
-T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
+# T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
 
 ##### 2.3 #####
 
@@ -220,10 +261,3 @@ def main():
     plt.show()
 
 # main()
-
-# kwant.plotter.bands needs a builder.InfiniteSystem object as input, sys is not one of those.
-# kwant.plotter.bands(sys, show=True)
-
-##### 2.4 #####
-
-T_of_E()
