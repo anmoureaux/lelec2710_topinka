@@ -9,6 +9,7 @@ import scipy
 import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
+import random
 
 ##### 2.1 #####
 
@@ -179,6 +180,12 @@ def make_circle_quad(square, x0, y0, R, onsite, iterations, t):
     for i in range(1, iterations):
         make_circle2(square, x0, y0, R+i-1, quad_dec[i])
 
+###################### random background potential ############
+def make_random_bg_pot(square,W,L) :
+    for i in range(L) :
+        for j in range(W) :
+            if random.randint(0,1) :
+                   square[]
 W = 100
 L = 200
 square = scattering(W,L)
@@ -193,7 +200,7 @@ for i in range(L):
         # print("i,j = {},{}".format(i,j))
         mat[j][i] = square3[lat(i,j)]
 
-'''
+
 ##### Current density #####
 
 wfs = kwant.wave_function(sys, energy=0.8)
@@ -201,7 +208,7 @@ wf_left = wfs(0)
 J0 = kwant.operator.Current(sys)
 current = sum(J0(p) for p in wf_left)
 kwant.plotter.current(sys, current, cmap='viridis')
-'''
+
 
 ##### Plot of the on-site parameter in the lattice #####
 
@@ -212,7 +219,7 @@ xx, yy = np.meshgrid(x, y)
 ax.scatter(xx, yy)
 plt.contourf(x, y, mat)
 plt.title("W={},L={},a={},t={}".format(W,L,a,t))
-plt.savefig("on_site.png")
+plt.show()
 
 # The function T_of_E is quite heavy and takes some time to execute so I should be careful when 
 # calling it with large inputs
@@ -231,8 +238,8 @@ def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
     plt.ylabel("Conductance [e²/h]")
     plt.title(title)
 
-T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
-plt.savefig("T_of_E.png")
+#T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
+#plt.savefig("T_of_E.png")
 
 ##### 2.3 #####
 
