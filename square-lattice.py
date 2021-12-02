@@ -150,55 +150,84 @@ def make_QPC_parabola_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadra
 # The 3 functions below work according to the same structure as the ones for the gates (make_QPC_x).
 
 # The 'onsite' parameter is equivalent to 'QPC_pot' and 'pot', they all represent the same thing.
-def make_circle1(square, x0, y0, R, onsite):
+def make_circle1(square, x0, y0, R, onsite, add=False):
     xm = int(np.floor(x0-R))
     xM = int(np.ceil(x0+R))
     ym = int(np.floor(y0-R))
     yM = int(np.ceil(y0+R))
     for i in range(xm, xM+1): # i is the line index
         for j in range(ym, yM+1): # j is the column index
-            if ((i-x0)**2 + (j-y0)**2) <= R**2:
-                square[lat(j, i)] = onsite
+            if ((i-x0)**2 + (j-y0)**2) <= R**2 and not(add):
+                square[lat(j,i)] = onsite
+            elif ((i-x0)**2 + (j-y0)**2) <= R**2 and add:
+                try :
+                    square[lat(j,i)] += onsite
+                except :
+                    pass
 
-def make_circle2(square, x0, y0, R, onsite):
+def make_circle2(square, x0, y0, R, onsite, add=False):
     xm = int(np.floor(x0-(R+1)))
     xM = int(np.ceil(x0+(R+1)))
     ym = int(np.floor(y0-(R+1)))
     yM = int(np.ceil(y0+(R+1)))
     for i in range(xm, xM+1): # i is the line index
         for j in range(ym, yM+1): # j is the column index
-            if R**2 < ((i-x0)**2 + (j-y0)**2) <= (R+1)**2:
-                square[lat(j, i)] = onsite
+            if R**2 < ((i-x0)**2 + (j-y0)**2) <= (R+1)**2 and not(add):
+                square[lat(j,i)] = onsite
+            elif R**2 < ((i-x0)**2 + (j-y0)**2) <= (R+1)**2 and add :
+                try :
+                    square[lat(j,i)] += onsite
+                except : 
+                    pass
 
-def make_circle_quad(square, x0, y0, R, onsite, iterations, t):
-    make_circle1(square, x0, y0, R, onsite)
+def make_circle_quad(square, x0, y0, R, onsite, iterations, t, add=False):
+    make_circle1(square, x0, y0, R, onsite,add)
     n = iterations-1
     b = (4*n*t + 2*n*t*(onsite/t)**0.5)/(onsite - 4*t)
     a = b**2*onsite
     x = np.arange(0, iterations, 1)
     quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
     for i in range(1, iterations):
-        make_circle2(square, x0, y0, R+i-1, quad_dec[i])
+        make_circle2(square, x0, y0, R+i-1, quad_dec[i],add)
 
 ###################### random background potential ############
-def make_random_bg_pot(square,W,L) :
-    for i in range(L) :
-        for j in range(W) :
-            if random.randint(0,1) :
-                   square[]
+def get_size(size,stdev) :
+    return np.random.normal(size,stdev)
+
+def get_onsite(onsite,stdev) :
+    return np.random.normal(onsite,stdev)
+
+def make_random_bg_pot(square,W,L,frequency,size,size_stdev,onsite,onsite_stdev,iterations) :
+    for x0 in range(W) :
+        for y0 in range(L) :
+            if random.randint(0,1/frequency) == 0 :
+                make_circle_quad(square,x0,y0,R=get_size(size,size_stdev),onsite=abs(get_onsite(onsite,onsite_stdev)),iterations=iterations,t=1,add=True)
+
 W = 100
 L = 200
 square = scattering(W,L)
-square2 = scattering(W,L)
-square3 = scattering(W,L)
-make_QPC_parabola_quad(square3, W, L, 25, 2.5, 25, 10, 1)
-make_circle_quad(square3, x0=W//2, y0=L//3, R=1.5, onsite=25, iterations=5, t=1)
-sys = square3.finalized()
+make_QPC_parabola_quad(square, W, L, 25, 2.5, 25, 10, 1)
+make_circle_quad(square, x0=W//2, y0=L//3, R=1.5, onsite=25, iterations=5, t=1)
+
+#the random background potential
+#tip : size = 1.5
+#      onsite = 25
+#      iterations = 5
+
+#potential bumps parameters
+size = 0.5
+size_stdev = 0.5
+onsite = 1
+onsite_stdev = 2
+iterations = 3
+frequency = 0.01 #the frequency to find a potential bump at a certain position
+make_random_bg_pot(square,W,L,frequency,size,size_stdev,onsite,onsite_stdev,iterations)
+
+sys = square.finalized()
 mat = np.zeros((W,L))
 for i in range(L):
     for j in range(W):
-        # print("i,j = {},{}".format(i,j))
-        mat[j][i] = square3[lat(i,j)]
+        mat[j][i] = square[lat(i,j)]
 
 
 ##### Current density #####
