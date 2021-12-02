@@ -17,7 +17,7 @@ t = 1 # t is the hopping parameter
 lat = kwant.lattice.square(a, norbs=1) # to decomment if problem
 
 def make_lead_x(W):
-    syst = kwant.Builder(kwant.TranslationalSymmetry([-1, 0]))
+    syst = kwant.Builder(kwant.TranslationalSymmetry([-a, 0]))
     syst[(lat(0, y) for y in range(W))] = 4 * t
     syst[lat.neighbors()] = -t
     return syst
@@ -33,12 +33,14 @@ def scattering(W, L):
     sr.attach_lead(lead.reversed())
     return sr
 
+############### Rectangular gates ################################
+
 # make_QPC1 takes as input a lattice (square), its dimensions (W,L), 2 parameters defining the size 
 # of the QPC (r,q) and the value to give to the lattice nodes symbolising the QPC (QPC_pot).
-# The dimensions of the QPC are (2*L/r x 2*W/q) centered at x=L/2 and for 0<y<W/q and W(q+2)/2<y<W.
+# The dimensions of the QPC are (2*L/r x 2*W/q) centered at x=L/2 and for 0<y<W/q and W-W/q<y<W.
 # It returns the indices needed by make_QPC2 to build the smooth transition zone.
 
-def make_QPC1(square, W, L, r, q, QPC_pot):
+def make_QPC1_rect(square, W, L, r, q, QPC_pot):
     x1 = L//2 - L//r
     x2 = L//2 + L//r
     y1 = W//q
@@ -47,7 +49,7 @@ def make_QPC1(square, W, L, r, q, QPC_pot):
         for j in range(L):
             if x1<j<x2 and (i<y1 or i>=y2):
                 square[lat(j,i)] = QPC_pot
-    return x1, x2, y1, y2
+    return x1,x2,y1,y2
 
 # make_QPC2 is responsible for the decrease of on-site parameter in order to have a smoother 
 # transition between the gates and the channel. This is much more realistic than having an abrupt 
@@ -56,36 +58,90 @@ def make_QPC1(square, W, L, r, q, QPC_pot):
 # It returns the indices of the next lines to be updated.
 # This function should be applied several times in a row in order to produce the smooth transition.
 
-def make_QPC2(square, W, L, x1, x2, y1, y2, pot):
-    y2 = y2-1
+def make_QPC2_rect(square, W, L, x1, x2, y1, y2, pot):
     for i in range(W):
         for j in range(L):
-            if (j==x1 or j==x2) and (i<y1 or i>y2):
+            if (j==x1 or j==x2) and (i<=y1 or i>=y2):
                 square[lat(j,i)] = pot
             if (i==y1 or i==y2) and (x1<=j<=x2):
                 square[lat(j,i)] = pot
-    return x1-1, x2+1, y1+1, y2
+    return x1-1, x2+1, y1+1, y2-1
 
-def make_QPC_lin(square, W, L, r, q, QPC_pot, iterations, t): # Linear decrease
-    x1, x2, y1, y2 = make_QPC1(square, W, L, r, q, QPC_pot)
-    n = iterations-1
-    m = (4*t-QPC_pot)/(n)
+def make_QPC_rect_lin(square, W, L, r, q, QPC_pot, iterations, t): # Linear decrease
+    x1,x2,y1,y2 = make_QPC1_rect(square, W, L, r, q, QPC_pot)
+    m = (QPC_pot-4*t)/(iterations)
     for i in range(1, iterations):
-        next_x1, next_x2, next_y1, next_y2 = make_QPC2(square, W, L, x1, x2, y1, y2, QPC_pot+m*i)
-        x1, x2, y1, y2 = next_x1, next_x2, next_y1, next_y2
-
+        x1, x2, y1, y2 = make_QPC2_rect(square, W, L, x1, x2, y1, y2, QPC_pot-m*i)
+         
 # The 'iterations' parameter defines the length between the source at QPC_pot and the channel.
 # QPC_pot is the highest value of on-site (the one on the gates)
-def make_QPC_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadratic decrease
-    x1, x2, y1, y2 = make_QPC1(square, W, L, r, q, QPC_pot)
+def make_QPC_rect_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadratic decrease
+    x1, x2, y1, y2 = make_QPC1_rect(square, W, L, r, q, QPC_pot)
     n = iterations-1
     b = (4*n*t + 2*n*t*(QPC_pot/t)**0.5)/(QPC_pot - 4*t)
     a = b**2*QPC_pot
     x = np.arange(0, iterations, 1)
     quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
     for i in range(1, iterations):
-        next_x1, next_x2, next_y1, next_y2 = make_QPC2(square, W, L, x1, x2, y1, y2, quad_dec[i])
-        x1, x2, y1, y2 = next_x1, next_x2, next_y1, next_y2
+        x1, x2, y1, y2 = make_QPC2_rect(square, W, L, x1, x2, y1, y2, quad_dec[i])
+
+################## Parabolic gates #################################""
+
+def make_QPC1_parabola(square, W, L, r, q, QPC_pot):
+    x1 = L//2 - L//r
+    x2 = L//2 + L//r
+    y1 = W//q
+    y2 = W - W//q
+    #bottom gate parabola
+    a1 = y1*(L**2/4+(x1**2-x2**2)/(x2-x1)*L/2-x1**2-(x1**2-x2**2)/(x2-x1)*x1)**(-1)
+    b1 = a1*(x1**2-x2**2)/(x2-x1)
+    c1 = -(a1*x1**2+b1*x1)
+    #top gate parabola
+    a2 = -y1*(L**2/4+(x1**2-x2**2)/(x2-x1)*L/2-x1**2-(x1**2-x2**2)/(x2-x1)*x1)**(-1)
+    b2 = a2*(x1**2-x2**2)/(x2-x1)
+    c2 = W-a2*x1**2-b2*x1
+    for i in range(W) : 
+        for j in range(L) : 
+            if i <= a1*j**2+b1*j+c1 or i >= a2*j**2+b2*j+c2 :
+                square[lat(j,i)] = QPC_pot
+    return x1,y1,x2,y2
+
+def make_QPC2_parabola(square, W, L, x1, y1, x2, y2, pot, tol) :
+    #bottom gate parabola
+    a1 = y1*(L**2/4+(x1**2-x2**2)/(x2-x1)*L/2-x1**2-(x1**2-x2**2)/(x2-x1)*x1)**(-1)
+    b1 = a1*(x1**2-x2**2)/(x2-x1)
+    c1 = -(a1*x1**2+b1*x1)
+    #top gate parabola
+    a2 = -y1*(L**2/4+(x1**2-x2**2)/(x2-x1)*L/2-x1**2-(x1**2-x2**2)/(x2-x1)*x1)**(-1)
+    b2 = a2*(x1**2-x2**2)/(x2-x1)
+    c2 = W-a2*x1**2-b2*x1
+    for i in range(W):
+        for j in range(L):
+            if abs(a1*j**2+b1*j+c1 - i)<=tol or abs(a2*j**2+b2*j+c2 - i)<=tol : 
+                square[lat(j,i)] = pot
+    x1 -= 1
+    x2 += 1
+    y1 += 0.7
+    y2 -= 0.7
+    return x1,y1,x2,y2
+
+def make_QPC_parabola_lin(square, W, L, r, q, QPC_pot, iterations, t): # Linear decrease
+    x1,y1,x2,y2 = make_QPC1_parabola(square, W, L, r, q, QPC_pot)
+    tol = 4
+    m = (QPC_pot-4*t)/(iterations)
+    for i in range(1, iterations):
+        x1,y1,x2,y2 = make_QPC2_parabola(square, W, L,x1,y1,x2,y2,QPC_pot-m*i,tol)
+
+def make_QPC_parabola_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadratic decrease
+    x1, x2, y1, y2 = make_QPC1_parabola(square, W, L, r, q, QPC_pot)
+    tol = 4
+    n = iterations
+    b = (4*n*t + 2*n*t*(QPC_pot/t)**0.5)/(QPC_pot - 4*t)
+    a = b**2*QPC_pot
+    x = np.arange(0, iterations, 1)
+    quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
+    for i in range(1, iterations):
+        x1, x2, y1, y2 = make_QPC2_parabola(square, W, L, x1, x2, y1, y2, quad_dec[i], tol)
 
 ##### Modelisation of the SPM tip #####
 
@@ -127,7 +183,7 @@ L = 200
 square = scattering(W,L)
 square2 = scattering(W,L)
 square3 = scattering(W,L)
-make_QPC_quad(square3, W, L, 25, 2.3, 25, 8, 1)
+make_QPC_parabola_quad(square3, W, L, 25, 2.5, 25, 10, 1)
 make_circle_quad(square3, x0=W//2, y0=L//3, R=1.5, onsite=25, iterations=5, t=1)
 sys = square3.finalized()
 mat = np.zeros((W,L))
@@ -135,6 +191,7 @@ for i in range(L):
     for j in range(W):
         # print("i,j = {},{}".format(i,j))
         mat[j][i] = square3[lat(i,j)]
+
 
 ##### Current density #####
 
@@ -148,61 +205,12 @@ kwant.plotter.current(sys, current, cmap='viridis')
 ##### Plot of the on-site parameter in the lattice #####
 
 fig, ax = plt.subplots()
-
 x = np.arange(0, L, 1)
 y = np.arange(0, W, 1)
 xx, yy = np.meshgrid(x, y)
 ax.scatter(xx, yy)
 plt.contourf(x, y, mat)
 plt.show()
-
-##### Parabolic gates #####
-
-x0 = 2
-r = 25
-q = 15
-n = 3
-# X = np.arange(x0, x0+2*(n+1), 1)
-# dY = np.zeros(2*n+1)
-# for i in range(n):
-#     dY[i] = 2**(-i+1)
-#     dY[-(i+1)] = -dY[i]
-# Y = np.zeros(len(dY)+1)
-# for i in range(1,len(Y)):
-#     Y[i] = Y[i-1] + dY[i-1]
-# plt.plot(X,Y)
-# plt.grid()
-
-def make_parabola(x0, n, e, W):
-    x = np.arange(x0, x0+2*(n+1), 1)
-    dy = dY = np.zeros(2*n+1)
-    y = np.zeros(len(dY)+1)
-    Y = np.zeros(len(dY)+1)
-    for i in range(n):
-        dy[i] = e*2**(-i)
-        dy[-(i+1)] = -dy[i]
-    for i in range(len(y)):
-        if i==0:
-            y[i] = 0
-            Y[i] = W
-        else:
-            y[i] = y[i-1] + dy[i-1]
-            Y[i] = W - y[i]
-    plt.plot(x, y)
-    plt.plot(x, Y)
-    plt.grid()
-    return x, y, dy, Y
-
-# X, Y, dY, Yy = make_parabola(x0, n, n+1, W)
-# plt.figure()
-# plt.plot(X, Y)
-# plt.plot(X, Yy)
-# plt.grid()
-m=3
-# for i in range(m):
-#     make_parabola(x0+m-i, i, i+1, W)
-
-# kwant.plot(square2)
 
 # The function T_of_E is quite heavy and takes some time to execute so I should be careful when 
 # calling it with large inputs
