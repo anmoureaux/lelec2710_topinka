@@ -8,6 +8,7 @@ import kwant
 import scipy
 import numpy as np
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 ##### 2.1 #####
 
@@ -192,7 +193,7 @@ for i in range(L):
         # print("i,j = {},{}".format(i,j))
         mat[j][i] = square3[lat(i,j)]
 
-
+'''
 ##### Current density #####
 
 wfs = kwant.wave_function(sys, energy=0.8)
@@ -200,7 +201,7 @@ wf_left = wfs(0)
 J0 = kwant.operator.Current(sys)
 current = sum(J0(p) for p in wf_left)
 kwant.plotter.current(sys, current, cmap='viridis')
-
+'''
 
 ##### Plot of the on-site parameter in the lattice #####
 
@@ -210,7 +211,8 @@ y = np.arange(0, W, 1)
 xx, yy = np.meshgrid(x, y)
 ax.scatter(xx, yy)
 plt.contourf(x, y, mat)
-plt.show()
+plt.title("W={},L={},a={},t={}".format(W,L,a,t))
+plt.savefig("on_site.png")
 
 # The function T_of_E is quite heavy and takes some time to execute so I should be careful when 
 # calling it with large inputs
@@ -219,7 +221,7 @@ plt.show()
 def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
     Energy = np.linspace(E_m, E_M, 100)
     Trans = np.zeros(len(Energy))
-    for i in range(len(Energy)):
+    for i in tqdm(range(len(Energy))):
         Trans[i] = kwant.smatrix(sys, energy = Energy[i]).transmission(1,0)
         print(str(i)+'/'+str(len(Energy)))
     plt.figure()
@@ -229,7 +231,8 @@ def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
     plt.ylabel("Conductance [e²/h]")
     plt.title(title)
 
-# T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
+T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
+plt.savefig("T_of_E.png")
 
 ##### 2.3 #####
 
@@ -238,20 +241,15 @@ def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
 def make_lead(a=1, t=1.0, W=10): # Default values are a=1, t=1, W=10
     # Start with an empty lead with a single square lattice
     lat = kwant.lattice.square(a)
-
     sym_lead = kwant.TranslationalSymmetry((-a, 0))
     lead = kwant.Builder(sym_lead)
-
     # build up one unit cell of the lead, and add the hoppings
     # to the next unit cell
     for j in range(W):
         lead[lat(0, j)] = 4 * t
-
         if j > 0:
             lead[lat(0, j), lat(0, j - 1)] = -t
-
         lead[lat(1, j), lat(0, j)] = -t
-
     return lead
 
 # Remark : the Band structure plotted below is the one of the leads and is not influenced by the 
