@@ -135,7 +135,7 @@ def make_QPC_parabola_lin(square, W, L, r, q, QPC_pot, iterations, t): # Linear 
 
 def make_QPC_parabola_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadratic decrease
     x1, x2, y1, y2 = make_QPC1_parabola(square, W, L, r, q, QPC_pot)
-    tol = 4
+    tol = W/5
     n = iterations
     b = (4*n*t + 2*n*t*(QPC_pot/t)**0.5)/(QPC_pot - 4*t)
     a = b**2*QPC_pot
@@ -149,43 +149,46 @@ def make_QPC_parabola_quad(square, W, L, r, q, QPC_pot, iterations, t): # Quadra
 # The 3 functions below work according to the same structure as the ones for the gates (make_QPC_x).
 
 # The 'onsite' parameter is equivalent to 'QPC_pot' and 'pot', they all represent the same thing.
-def make_circle1(square, x0, y0, R, onsite):
+def make_circle1(square, x0, y0, R, onsite,tol):
     xm = int(np.floor(x0-R))
     xM = int(np.ceil(x0+R))
     ym = int(np.floor(y0-R))
     yM = int(np.ceil(y0+R))
     for i in range(xm, xM+1): # i is the line index
         for j in range(ym, yM+1): # j is the column index
-            if ((i-x0)**2 + (j-y0)**2) <= R**2:
+            if ((i-x0)**2 + (j-y0)**2) <= (R+tol)**2:
                 square[lat(j, i)] = onsite
 
-def make_circle2(square, x0, y0, R, onsite):
-    xm = int(np.floor(x0-(R+1)))
-    xM = int(np.ceil(x0+(R+1)))
-    ym = int(np.floor(y0-(R+1)))
-    yM = int(np.ceil(y0+(R+1)))
+def make_circle2(square, x0, y0, R, onsite, tol):
+    R += 1
+    xm = int(np.floor(x0-R))
+    xM = int(np.ceil(x0+R))
+    ym = int(np.floor(y0-R))
+    yM = int(np.ceil(y0+R))
     for i in range(xm, xM+1): # i is the line index
         for j in range(ym, yM+1): # j is the column index
-            if R**2 < ((i-x0)**2 + (j-y0)**2) <= (R+1)**2:
+            dist_from_center_squared = ((i-x0)**2 + (j-y0)**2)
+            if  dist_from_center_squared >= R**2  and dist_from_center_squared <= (R+tol)**2:
                 square[lat(j, i)] = onsite
 
 def make_circle_quad(square, x0, y0, R, onsite, iterations, t):
-    make_circle1(square, x0, y0, R, onsite)
+    tol = x0//120
+    make_circle1(square, x0, y0, R, onsite,tol)
     n = iterations-1
     b = (4*n*t + 2*n*t*(onsite/t)**0.5)/(onsite - 4*t)
     a = b**2*onsite
     x = np.arange(0, iterations, 1)
     quad_dec = a/(x+b)**2 # quad_dec is the quadratically decreasing potential
     for i in range(1, iterations):
-        make_circle2(square, x0, y0, R+i-1, quad_dec[i])
+        make_circle2(square, x0, y0, R+i-1, quad_dec[i],tol)
 
-W = 100
-L = 200
+W = 250
+L = 500
 square = scattering(W,L)
 square2 = scattering(W,L)
 square3 = scattering(W,L)
-make_QPC_parabola_quad(square3, W, L, 25, 2.5, 25, 10, 1)
-make_circle_quad(square3, x0=W//2, y0=L//3, R=1.5, onsite=25, iterations=5, t=1)
+make_QPC_parabola_quad(square3, W, L, 25, 2.5, 25, 20, 1)
+make_circle_quad(square3, x0=W//2, y0=L//3, R=W//100, onsite=25, iterations=20, t=1)
 sys = square3.finalized()
 mat = np.zeros((W,L))
 for i in range(L):
@@ -201,9 +204,10 @@ wf_left = wfs(0)
 J0 = kwant.operator.Current(sys)
 current = sum(J0(p) for p in wf_left)
 kwant.plotter.current(sys, current, cmap='viridis')
-'''
+kwant.plotter.savefig("current_density.png")
 
 ##### Plot of the on-site parameter in the lattice #####
+'''
 
 fig, ax = plt.subplots()
 x = np.arange(0, L, 1)
@@ -212,7 +216,7 @@ xx, yy = np.meshgrid(x, y)
 ax.scatter(xx, yy)
 plt.contourf(x, y, mat)
 plt.title("W={},L={},a={},t={}".format(W,L,a,t))
-plt.savefig("on_site.png")
+plt.show()
 
 # The function T_of_E is quite heavy and takes some time to execute so I should be careful when 
 # calling it with large inputs
@@ -230,9 +234,8 @@ def T_of_E(E_m, E_M, sys, title): # Plots the relation T(E)
     plt.xlabel("Energy [t]")
     plt.ylabel("Conductance [e²/h]")
     plt.title(title)
-
-T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
-plt.savefig("T_of_E.png")
+#T_of_E(0, 5, sys, "W = "+str(W)+" ; L = "+str(L))
+#plt.savefig("T_of_E.png")
 
 ##### 2.3 #####
 
